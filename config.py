@@ -32,3 +32,7 @@ TELEGRAM_ADMIN_USER_ID = int(os.getenv("TELEGRAM_ADMIN_USER_ID", "0"))
 # ── API ────────────────────────────────────────────────
 API_TIMEOUT = 15
 GAMMA_API = "https://gamma-api.polymarket.com"
+
+# ── Cleanup ────────────────────────────────────────────
+CLEANUP_INTERVAL_MIN = 1440        # run cleanup once per day (24h)
+CLEANUP_KEEP_FULL_HOURS = 48       # keep 5-min resolution for last 48h

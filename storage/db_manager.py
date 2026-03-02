@@ -119,3 +119,59 @@ class DBManager:
         count = conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
         conn.close()
         return count
+
+    def cleanup_old_data(self, keep_full_hours=48):
+        """
+        Cleanup routine:
+        1. Delete all snapshots from resolved markets (yes_prob > 99 or < 1)
+        2. Downsample data older than keep_full_hours to ~1 per hour per market
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # ── Step 1: Delete resolved market snapshots ──
+        cursor.execute("""
+            DELETE FROM snapshots
+            WHERE condition_id IN (
+                SELECT condition_id FROM snapshots
+                WHERE snapshot_time = (SELECT MAX(snapshot_time) FROM snapshots)
+                AND (yes_prob > 99 OR yes_prob < 1)
+            )
+        """)
+        resolved_deleted = cursor.rowcount
+        logger.info(f"🗑  Deleted {resolved_deleted} snapshots from resolved markets")
+
+        # ── Step 2: Downsample old data to hourly ──
+        cutoff = f"-{keep_full_hours} hours"
+
+        # Keep the snapshot closest to the top of each hour
+        cursor.execute("""
+            DELETE FROM snapshots
+            WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id,
+                           condition_id,
+                           snapshot_time,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY condition_id, strftime('%Y-%m-%d %H', snapshot_time)
+                               ORDER BY snapshot_time ASC
+                           ) as rn
+                    FROM snapshots
+                    WHERE snapshot_time < datetime('now', ?)
+                )
+                WHERE rn = 1
+            )
+            AND snapshot_time < datetime('now', ?)
+        """, (cutoff, cutoff))
+        downsampled_deleted = cursor.rowcount
+        logger.info(f"📉 Downsampled: removed {downsampled_deleted} old high-frequency snapshots")
+
+        conn.commit()
+
+        # Reclaim disk space
+        cursor.execute("VACUUM")
+        conn.close()
+
+        total = resolved_deleted + downsampled_deleted
+        logger.info(f"✅ Cleanup done: {total} total rows removed")
+        return resolved_deleted, downsampled_deleted

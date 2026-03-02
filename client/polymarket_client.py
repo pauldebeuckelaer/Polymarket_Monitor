@@ -90,9 +90,14 @@ class PolymarketClient:
             if m.get('closed'):
                 continue
 
+            # Skip resolved/dead markets (prob > 99% or < 1%)
+            yes_prob_raw = float(m.get('bestBid', 0) or 0)
+            if yes_prob_raw > 0.99 or yes_prob_raw < 0.01:
+                continue
+
             # Use bestBid as YES probability (most reliable)
-            yes_prob = float(m.get('bestBid', 0) or 0) * 100
-            best_bid = float(m.get('bestBid', 0) or 0)
+            yes_prob = yes_prob_raw * 100
+            best_bid = yes_prob_raw
             best_ask = float(m.get('bestAsk', 0) or 0)
 
             results.append({

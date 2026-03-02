@@ -300,6 +300,7 @@ def main():
 
     cycle_count = 0
     last_discovery = 0
+    last_cleanup = 0
 
     try:
         while True:
@@ -317,10 +318,22 @@ def main():
 
             total_markets, total_alerts = run_cycle(client, db, themes, do_discovery)
 
+            # Daily cleanup
+            minutes_since_cleanup = (time.time() - last_cleanup) / 60
+            if minutes_since_cleanup >= config.CLEANUP_INTERVAL_MIN:
+                logger.info("  🧹 Running daily cleanup...")
+                resolved, downsampled = db.cleanup_old_data(
+                    keep_full_hours=config.CLEANUP_KEEP_FULL_HOURS
+                )
+                logger.info(f"  🧹 Cleanup: {resolved} resolved, {downsampled} downsampled")
+                last_cleanup = time.time()
+
             logger.info(f"  ✅ Cycle done: {total_markets} markets, {total_alerts} alerts")
             logger.info(f"  💾 DB total: {db.get_snapshot_count()} snapshots")
             logger.info(f"  💤 Next cycle in {config.SNAPSHOT_INTERVAL_MIN} min...")
             time.sleep(config.SNAPSHOT_INTERVAL_MIN * 60)
+
+
 
     except KeyboardInterrupt:
         logger.info("\n🛑 Monitor stopped by user")
