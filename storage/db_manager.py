@@ -131,13 +131,10 @@ class DBManager:
 
         # ── Step 1: Delete resolved market snapshots ──
         cursor.execute("""
-            DELETE FROM snapshots
-            WHERE condition_id IN (
-                SELECT condition_id FROM snapshots
-                WHERE snapshot_time = (SELECT MAX(snapshot_time) FROM snapshots)
-                AND (yes_prob > 99 OR yes_prob < 1)
-            )
-        """)
+                    DELETE FROM snapshots
+                    WHERE yes_prob > 99 OR yes_prob < 1
+                """)
+        
         resolved_deleted = cursor.rowcount
         logger.info(f"🗑  Deleted {resolved_deleted} snapshots from resolved markets")
 
