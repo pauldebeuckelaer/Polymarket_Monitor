@@ -28,6 +28,7 @@ TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 TELEGRAM_PHONE = os.getenv("TELEGRAM_PHONE", "")
 TELEGRAM_SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "polymarket_monitor")
 TELEGRAM_ADMIN_USER_ID = int(os.getenv("TELEGRAM_ADMIN_USER_ID", "0"))
+TELEGRAM_ENABLED = False          # Set True to re-enable Telegram alerts
 
 # ── API ────────────────────────────────────────────────
 API_TIMEOUT = 15

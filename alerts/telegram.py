@@ -53,6 +53,8 @@ def _send_sync(text):
 
 def send_message(text):
     """Send a message to Telegram. Drop-in replacement."""
+    if not config.TELEGRAM_ENABLED:
+        return False
     return _send_sync(text)
 
 
@@ -94,7 +96,7 @@ def format_summary(top_alerts, theme_name, total_alerts, total_markets):
 
 def send_alerts(alerts, theme_name, total_markets):
     """Filter alerts and send a summary to Telegram if any qualify."""
-    if not alerts:
+    if not alerts or not config.TELEGRAM_ENABLED:
         return 0
 
     top_alerts = filter_alerts(alerts)
