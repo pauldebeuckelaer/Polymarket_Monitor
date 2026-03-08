@@ -6,6 +6,7 @@ Handles all communication with the Polymarket Gamma API.
 
 import requests
 import logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,16 @@ class PolymarketClient:
         for m in event.get('markets', []):
             if m.get('closed'):
                 continue
+
+            # Skip expired markets
+            end_date = m.get('endDate', '')
+            if end_date:
+                try:
+                    end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    if end_dt < datetime.now(timezone.utc):
+                        continue
+                except:
+                    pass
 
             # Skip resolved/dead markets (prob > 99% or < 1%)
             yes_prob_raw = float(m.get('bestBid', 0) or 0)

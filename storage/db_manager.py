@@ -134,7 +134,7 @@ class DBManager:
                     DELETE FROM snapshots
                     WHERE yes_prob > 99 OR yes_prob < 1
                 """)
-        
+
         resolved_deleted = cursor.rowcount
         logger.info(f"🗑  Deleted {resolved_deleted} snapshots from resolved markets")
 
