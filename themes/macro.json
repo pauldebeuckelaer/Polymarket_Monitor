@@ -1,0 +1,18 @@
+{
+  "name": "Macro",
+  "active": true,
+  "slugs": [
+    "what-price-will-wti-hit-in-october-2026",
+    "will-gas-hit-by-end-of-october",
+    "will-us-crude-oil-reserves-fall-to-by-october-30",
+    "us-imports-russian-diesel-by-october-31",
+    "eu-lifts-ban-on-russian-diesel-imports-by-20261009201217742",
+    "eu-emergency-diesel-stocks-end-of-october-2026",
+    "eu-emergency-diesel-stocks-end-of-december-2026",
+    "iea-asks-germany-to-release-oil-stocks-byptptpt",
+    "iea-asks-france-to-release-oil-stocks-byptptpt"
+  ],
+  "tag_slugs": ["fed-rates", "cpi"],
+  "alert_threshold_pct": 3.0,
+  "snapshot_interval_min": 5
+}
