@@ -18,6 +18,7 @@ class PolymarketClient:
     def __init__(self, timeout=15):
         self.base_url = GAMMA_API
         self.timeout = timeout
+        self.last_tag_calls = 0
 
     def fetch_events_by_tag(self, tag_id, limit=50):
         """Fetch active events for a tag, sorted by 24h volume."""
@@ -61,25 +62,41 @@ class PolymarketClient:
             logger.error(f"Failed to fetch {slug}: {e}")
             return None
 
-    def fetch_events_by_tag_slug(self, tag_slug, limit=50):
-        """Fetch active events filtered by Polymarket tag slug."""
-        try:
-            r = requests.get(
-                f"{self.base_url}/events",
-                params={
-                    'tag_slug': tag_slug,
-                    'closed': 'false',
-                    'limit': limit,
-                },
-                timeout=self.timeout
-            )
-            r.raise_for_status()
-            events = r.json()
-            logger.info(f"Tag '{tag_slug}': fetched {len(events)} events")
-            return events
-        except Exception as e:
-            logger.error(f"Failed to fetch tag '{tag_slug}': {e}")
-            return []
+    def fetch_events_by_tag_slug(self, tag_slug, limit=100, max_pages=10):
+        """Fetch ALL open events for a tag slug, paging by `limit` per call.
+
+        Before Oct 2026 this was a single call, so any tag with more than
+        `limit` open events was silently truncated. Returns the event list
+        (same as before); the number of API calls used is in self.last_tag_calls.
+        """
+        events, calls = [], 0
+        for page in range(max_pages):
+            try:
+                r = requests.get(
+                    f"{self.base_url}/events",
+                    params={
+                        'tag_slug': tag_slug,
+                        'closed': 'false',
+                        'limit': limit,
+                        'offset': page * limit,
+                    },
+                    timeout=self.timeout
+                )
+                calls += 1
+                r.raise_for_status()
+                batch = r.json()
+            except Exception as e:
+                logger.error(f"Failed to fetch tag '{tag_slug}' page {page}: {e}")
+                break
+            events.extend(batch)
+            if len(batch) < limit:
+                break
+        else:
+            logger.warning(f"Tag '{tag_slug}': hit max_pages={max_pages}, "
+                           f"results may be truncated")
+        self.last_tag_calls = calls
+        logger.info(f"Tag '{tag_slug}': fetched {len(events)} events in {calls} calls")
+        return events
 
     def extract_markets(self, event):
         """Extract open, tradeable markets from an event."""

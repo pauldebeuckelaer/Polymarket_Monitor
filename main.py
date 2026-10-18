@@ -76,34 +76,59 @@ def load_themes():
 
 # ── Market Fetching (Optimized) ────────────────────────
 
+def _event_is_finished(event):
+    """True when an event can never produce an open market again."""
+    if event.get("closed", False):
+        return True
+    markets = event.get("markets", [])
+    return bool(markets) and all(m.get("closed", False) for m in markets)
+
+
 def fetch_theme_events(client, theme):
     """
     Fetch all events for a theme in minimal API calls.
     Returns dict: {slug: event_dict, ...}
+
+    Slugs whose event has finished are remembered in theme["_closed_slugs"]
+    (in memory) and not fetched again. After a restart they are re-checked
+    once, then skipped again.
     """
     events_by_slug = {}
     api_calls = 0
+    closed_slugs = theme.setdefault("_closed_slugs", set())
 
-    # Bulk fetch via tag_slugs
+    # Bulk fetch via tag_slugs (paged — no 100 cap)
     for tag_slug in theme.get("tag_slugs", []):
         tag_events = client.fetch_events_by_tag_slug(tag_slug, limit=100)
-        api_calls += 1
+        api_calls += client.last_tag_calls
         for event in tag_events:
             slug = event.get("slug", "")
             if slug and not event.get("closed", False):
                 events_by_slug[slug] = event
 
-    # Fetch only uncovered manual slugs
+    # Fetch only uncovered, not-yet-finished manual slugs
     covered_slugs = set(events_by_slug.keys())
-    manual_slugs = [s for s in theme.get("slugs", []) if s not in covered_slugs]
+    manual_slugs = [s for s in theme.get("slugs", [])
+                    if s not in covered_slugs and s not in closed_slugs]
 
+    newly_closed = 0
     for slug in manual_slugs:
         event = client.fetch_event_by_slug(slug)
         api_calls += 1
-        if event:
-            events_by_slug[slug] = event
+        if not event:
+            continue
+        if _event_is_finished(event):
+            closed_slugs.add(slug)
+            newly_closed += 1
+            continue
+        events_by_slug[slug] = event
 
-    logger.info(f"    {len(events_by_slug)} events fetched in {api_calls} API calls")
+    msg = f"    {len(events_by_slug)} events fetched in {api_calls} API calls"
+    if newly_closed:
+        msg += f" | {newly_closed} newly finished slugs skipped from now on"
+    if closed_slugs:
+        msg += f" | {len(closed_slugs)} finished slugs skipped"
+    logger.info(msg)
     return events_by_slug
 
 
@@ -207,6 +232,7 @@ def run_cycle(client, db, themes, do_discovery):
     """
     total_markets = 0
     total_alerts = 0
+    stored_this_cycle = set()   # condition_ids already stored by an earlier theme
 
     for theme in themes:
         theme_name = theme["name"]
@@ -238,6 +264,13 @@ def run_cycle(client, db, themes, do_discovery):
         for slug, event in events_by_slug.items():
             markets = client.extract_markets(event)
             all_markets.extend(markets)
+
+        # Same contract in two themes (e.g. Iran + macro): store it once per cycle
+        before = len(all_markets)
+        all_markets = [m for m in all_markets if m["condition_id"] not in stored_this_cycle]
+        if before != len(all_markets):
+            logger.info(f"    {before - len(all_markets)} markets already stored by another theme this cycle")
+        stored_this_cycle.update(m["condition_id"] for m in all_markets)
 
         if not all_markets:
             logger.info(f"    No open markets found")
