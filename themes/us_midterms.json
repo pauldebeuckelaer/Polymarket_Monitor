@@ -1,0 +1,25 @@
+{
+  "name": "US Midterms 2026",
+  "active": true,
+  "slugs": [
+    "balance-of-power-2026-midterms",
+    "which-party-will-win-the-senate-in-2026",
+    "which-party-will-win-the-house-in-2026",
+    "republican-senate-seats-after-the-2026-midterm-elections-927",
+    "who-wins-the-senate-pending-hormuz-agreement-before-the-midterms",
+    "who-wins-the-senate-pending-hormuz-agreement",
+    "who-wins-the-senate-pending-hormuz-agreement-by-oct-23-and-oil-below-80",
+    "who-wins-the-senate-pending-oil-below-85-before-the-midterms",
+    "who-wins-the-senate-pending-oil-above-or-below-80-before-the-midterms",
+    "michigan-senate-election-winner",
+    "texas-senate-election-winner",
+    "nebraska-senate-election-winner",
+    "ohio-senate-election-winner",
+    "alaska-senate-election-winner",
+    "iowa-senate-election-winner",
+    "maine-senate-election-winner"
+  ],
+  "tag_slugs": [],
+  "alert_threshold_pct": 3.0,
+  "snapshot_interval_min": 5
+}
