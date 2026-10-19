@@ -25,6 +25,7 @@ TWAP_DB = os.path.expanduser("~/bots/Hyperliquid_TWAP_Analyzer/data/twap.db")
 
 # First match wins, so order matters (Hormuz/ceasefire before generic oil, etc.)
 BUCKETS = [
+    ("Conditional: deal/oil x Senate", r"(agreement|oil).*(senate)"),
     ("Ceasefire / deal / Hormuz", r"ceasefire|peace|deal|agreement|hormuz|pezeshkian|al udeid|withdraw|negotiat|talks"),
     ("Red Sea / Houthis",          r"houthi|bab el|mandeb|red sea|yanbu"),
     ("Fed",                        r"\bfed\b|fed-|fomc|rate cut|rate hike|interest rate|powell"),
@@ -32,6 +33,8 @@ BUCKETS = [
     ("Oil / fuel",                 r"\bwti\b|wti-|crude|brent|\boil\b|oil-|diesel|gas price|gasoline"),
     ("Congress (midterms)",        r"senate|house|midterm|democrat|republican|congress"),
 ]
+
+EXCLUDE = r"japan"                 # non-US noise that matches CPI/yield keywords
 
 MID_MIN, MID_MAX = 0.015, 0.985   # drop near-resolved legs
 WIDE_SPREAD = 0.05                 # flag legs whose spread > 5c
@@ -65,6 +68,8 @@ def latest_rows(con, window_min):
 
 def bucket_of(event_slug, question):
     text = f"{event_slug} {question}".lower()
+    if re.search(EXCLUDE, text):
+        return None
     for name, pat in BUCKETS:
         if re.search(pat, text):
             return name
@@ -75,29 +80,46 @@ def fmt_pct(x):
     return f"{x * 100:5.1f}%"
 
 
+def _map(cols, cands):
+    low = {c.lower(): c for c in cols}
+    return next((low[c] for c in cands if c in low), None)
+
+
 def hype_btc(path):
-    """Latest close for HYPE and BTC from market_candles, with schema introspection."""
+    """Latest HYPE/BTC price. market_candles is only written when market_snapshots
+    rows age out (7-day retention), so it lags ~a week: read market_snapshots first,
+    fall back to market_candles. Schema is introspected; unmapped columns are printed."""
     if not os.path.exists(path):
         return [f"_twap.db not found at {path}_"]
     con = ro(path)
     try:
-        cols = [r[1] for r in con.execute("PRAGMA table_info(market_candles)")]
-        if not cols:
-            return ["_market_candles table not found in twap.db_"]
-        low = {c.lower(): c for c in cols}
-        coin = next((low[c] for c in ("coin", "symbol", "asset") if c in low), None)
-        close = next((low[c] for c in ("close", "c", "close_px", "close_price") if c in low), None)
-        tcol = next((low[c] for c in ("ts", "time", "timestamp", "open_time", "t", "candle_time") if c in low), None)
-        if not (coin and close and tcol):
-            return [f"_could not map market_candles columns: {cols}_"]
-        out = []
+        sources = [
+            ("market_snapshots", ("mid", "mid_px", "mark_px", "mark", "price", "px", "oracle_px", "last_px", "close")),
+            ("market_candles", ("close", "c", "close_px", "close_price")),
+        ]
+        out, notes = [], []
         for sym in ("HYPE", "BTC"):
-            r = con.execute(
-                f"SELECT {tcol}, {close} FROM market_candles WHERE {coin}=? ORDER BY {tcol} DESC LIMIT 1",
-                (sym,),
-            ).fetchone()
-            out.append(f"- **{sym}**: {r[1]} (candle {r[0]})" if r else f"- **{sym}**: no rows")
-        return out
+            got = None
+            for table, price_cands in sources:
+                cols = [r[1] for r in con.execute(f"PRAGMA table_info({table})")]
+                if not cols:
+                    continue
+                coin = _map(cols, ("coin", "symbol", "asset", "name"))
+                price = _map(cols, price_cands)
+                tcol = _map(cols, ("ts", "time", "timestamp", "snapshot_time", "open_time", "candle_time", "t"))
+                if not (coin and price and tcol):
+                    notes.append(f"_could not map {table} columns: {cols}_")
+                    continue
+                # Normalise 'T' vs ' ' separators so string-sorted times order correctly
+                r = con.execute(
+                    f"SELECT {tcol}, {price} FROM {table} WHERE {coin}=? "
+                    f"ORDER BY replace(CAST({tcol} AS TEXT),'T',' ') DESC LIMIT 1", (sym,)
+                ).fetchone()
+                if r:
+                    got = f"- **{sym}**: {r[1]}  ({table}.{price} @ {r[0]})"
+                    break
+            out.append(got or f"- **{sym}**: no rows")
+        return out + sorted(set(notes))
     finally:
         con.close()
 
@@ -162,7 +184,7 @@ def main():
                          f"{d['vol24']:,.0f} | {ch} | {d['q']} |")
         lines.append("")
 
-    lines += ["## HYPE / BTC (twap.db market_candles)", ""] + hype_btc(args.twap_db) + [""]
+    lines += ["## HYPE / BTC (twap.db)", ""] + hype_btc(args.twap_db) + [""]
 
     text = "\n".join(lines)
     print(text)
